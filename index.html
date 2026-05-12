@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mouse Head Turn Sprite</title>
+  <style>
+    @font-face {
+      font-family: "WhoheekingBianTao";
+      src:
+        local("[免費] 字魂扁桃體+"),
+        local("zihunbiantaoti"),
+        url("file:///Users/heehee/Library/Fonts/%5B%E5%85%8D%E8%B2%BB%5D%20%E5%AD%97%E9%AD%82%E6%89%81%E6%A1%83%E9%AB%94%20.ttf") format("truetype");
+      font-display: swap;
+    }
+
+    :root {
+      color-scheme: light;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #feefd4;
+      color: #1d1d1f;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      background: #feefd4;
+      cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Ctext x='4' y='38' font-size='36'%3E%F0%9F%A4%9A%3C/text%3E%3C/svg%3E") 18 18, auto;
+    }
+
+    .stage {
+      position: relative;
+      width: min(100vw, 1080px);
+      aspect-ratio: 1;
+      max-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #feefd4;
+      overflow: hidden;
+      cursor: inherit;
+    }
+
+    canvas {
+      position: relative;
+      z-index: 2;
+      width: min(72%, 720px);
+      height: min(72%, 720px);
+      image-rendering: auto;
+      filter: drop-shadow(0 18px 26px rgba(43, 38, 31, 0.18));
+    }
+
+    .hud {
+      position: fixed;
+      left: 16px;
+      bottom: 16px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 10px;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(12px);
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #2d8f5a;
+    }
+
+    .signature {
+      position: absolute;
+      z-index: 1;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -52%);
+      color: #fff;
+      font-family: "WhoheekingBianTao", "[免費] 字魂扁桃體+", "zihunbiantaoti", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      font-size: clamp(54px, 11vw, 124px);
+      line-height: 1;
+      letter-spacing: 0;
+      white-space: nowrap;
+      text-shadow: 0 4px 12px rgba(208, 158, 92, 0.18);
+      user-select: none;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <main class="stage" id="stage" data-testid="stage">
+    <canvas id="character" width="960" height="960" aria-label="calibrated sprite character"></canvas>
+    <div class="signature">@whoheeking</div>
+    <div class="hud" aria-live="polite">
+      <span class="dot"></span>
+      <span id="state" data-testid="state">center · frame 0</span>
+    </div>
+  </main>
+
+  <script>
+    const SPRITE = {
+      src: "sprite.webp",
+      frameWidth: 960,
+      frameHeight: 960,
+      columns: 8,
+      rows: 5,
+      frameCount: 39,
+      frontFrame: 0
+    };
+
+    // Calibrated from contact_sheet_raw.png / contact_sheet_keyed.png.
+    // Angles are canvas screen angles: 0=right, 90=down, -90=up.
+    const ANGLE_KEYS = [
+      { angle: -135, frame: 32, name: "left-up" },
+      { angle: -90, frame: 34, name: "up" },
+      { angle: -45, frame: 5, name: "right-up" },
+      { angle: 0, frame: 11, name: "right" },
+      { angle: 45, frame: 16, name: "right-down" },
+      { angle: 90, frame: 20, name: "down" },
+      { angle: 135, frame: 24, name: "left-down" },
+      { angle: 180, frame: 27, name: "left" }
+    ];
+
+    const canvas = document.getElementById("character");
+    const ctx = canvas.getContext("2d");
+    const stage = document.getElementById("stage");
+    const state = document.getElementById("state");
+    const image = new Image();
+    let currentFrame = -1;
+
+    function angularDistance(a, b) {
+      return Math.abs((((a - b) + 540) % 360) - 180);
+    }
+
+    function calibratedFrameForAngle(angle) {
+      let best = ANGLE_KEYS[0];
+      let bestDistance = Infinity;
+      for (const key of ANGLE_KEYS) {
+        const distance = angularDistance(angle, key.angle);
+        if (distance < bestDistance) {
+          best = key;
+          bestDistance = distance;
+        }
+      }
+      return best;
+    }
+
+    function drawFrame(frame, name) {
+      if (!image.complete || currentFrame === frame) return;
+      currentFrame = frame;
+      const sx = (frame % SPRITE.columns) * SPRITE.frameWidth;
+      const sy = Math.floor(frame / SPRITE.columns) * SPRITE.frameHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(
+        image,
+        sx,
+        sy,
+        SPRITE.frameWidth,
+        SPRITE.frameHeight,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+      state.textContent = `${name} · frame ${frame}`;
+      stage.dataset.direction = name;
+      stage.dataset.frame = String(frame);
+    }
+
+    function updateFromPoint(clientX, clientY) {
+      const rect = stage.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dx = clientX - cx;
+      const dy = clientY - cy;
+      if (Math.hypot(dx, dy) < 34) {
+        drawFrame(SPRITE.frontFrame, "center");
+        return;
+      }
+      const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+      const key = calibratedFrameForAngle(angle);
+      drawFrame(key.frame, key.name);
+    }
+
+    function setByName(name) {
+      if (name === "center") {
+        drawFrame(SPRITE.frontFrame, "center");
+        return;
+      }
+      const key = ANGLE_KEYS.find(item => item.name === name || item.name.replace("-", "") === name);
+      if (key) drawFrame(key.frame, key.name);
+    }
+
+    image.onload = () => {
+      drawFrame(SPRITE.frontFrame, "center");
+      const params = new URLSearchParams(location.search);
+      if (params.has("pose")) setByName(params.get("pose"));
+    };
+    image.src = SPRITE.src;
+
+    stage.addEventListener("pointermove", event => updateFromPoint(event.clientX, event.clientY));
+    stage.addEventListener("pointerleave", () => drawFrame(SPRITE.frontFrame, "center"));
+
+    window.__spriteCalibration = { SPRITE, ANGLE_KEYS, setByName };
+  </script>
+</body>
+</html>
